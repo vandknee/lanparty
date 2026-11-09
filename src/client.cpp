@@ -87,8 +87,9 @@ void receiveMessages(int socketFd) {
 void drawScreen(
     const vector<string>& history,
     const string& input,
-    const string& username
-) {
+    const string& username,
+    const string& currentRoom
+){
     erase();
 
     int rows, cols;
@@ -100,14 +101,13 @@ void drawScreen(
         return;
     }
 
+    
     // Header
     attron(A_BOLD | COLOR_PAIR(1));
     mvaddstr(0, 2, "LAN PARTY");
     attroff(A_BOLD | COLOR_PAIR(1));
 
-    string userLabel = "User: " + username;
-    mvaddnstr(1, 2, userLabel.c_str(), cols - 4);
-
+    // Connection status
     string status = connected ? "ONLINE" : "DISCONNECTED";
 
     if (connected)
@@ -115,13 +115,29 @@ void drawScreen(
     else
         attron(COLOR_PAIR(3));
 
-    mvaddnstr(1, max(2, cols - 16),
-              status.c_str(), 14);
+    mvaddnstr(0, max(2, cols - 16),
+            status.c_str(), 14);
 
     if (connected)
         attroff(COLOR_PAIR(2));
     else
         attroff(COLOR_PAIR(3));
+
+    // Username on the left
+    string userLabel = "User: " + username;
+    mvaddnstr(1, 2, userLabel.c_str(), cols - 4);
+
+    // Current room on the right
+    string roomLabel = "Room: #" + currentRoom;
+
+    attron(COLOR_PAIR(1));
+
+    mvaddnstr(1, max(2, cols - 34),
+            roomLabel.c_str(),
+            min(30, cols - 4));
+
+    attroff(COLOR_PAIR(1));
+
 
     mvhline(2, 0, ACS_HLINE, cols);
 
@@ -189,10 +205,10 @@ int main(int argc, char* argv[]) {
     if (argc != 2) {
         cout << "Usage: ./client SERVER_IP\n";
         return 1;
-    }
+    }   
 
     string username;
-
+    string currentRoom = "lobby";
     cout << "Enter username: ";
     getline(cin, username);
 
@@ -236,6 +252,17 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+
+    // Register username with the server
+    string registration = username + ": /hello\n";
+
+    if (!sendAll(clientSocket, registration)) {
+        cout << "Could not register with server.\n";
+        close(clientSocket);
+        return 1;
+    }
+
+
     // Initialize ncurses
     initscr();
     cbreak();
@@ -270,10 +297,30 @@ int main(int argc, char* argv[]) {
         {
             lock_guard<mutex> lock(messageMutex);
 
+            
             while (!incomingMessages.empty()) {
-                history.push_back(incomingMessages.front());
+                string message = incomingMessages.front();
                 incomingMessages.pop();
+
+                string createdPrefix =
+                    "[LAN Party] Created and joined #";
+
+                string joinedPrefix =
+                    "[LAN Party] Joined #";
+
+                if (message.rfind(createdPrefix, 0) == 0) {
+                    currentRoom = message.substr(createdPrefix.size());
+                }
+                else if (message.rfind(joinedPrefix, 0) == 0) {
+                    currentRoom = message.substr(joinedPrefix.size());
+                }
+                else if (message == "[LAN Party] You joined lobby.") {
+                    currentRoom = "lobby";
+                }
+
+                history.push_back(message);
             }
+
         }
 
         // Limit memory used for chat history
@@ -284,7 +331,7 @@ int main(int argc, char* argv[]) {
             );
         }
 
-        drawScreen(history, input, username);
+        drawScreen(history, input, username, currentRoom);
 
         // Read keyboard without blocking forever
         int key = getch();
@@ -308,7 +355,9 @@ int main(int argc, char* argv[]) {
                     history.push_back("Message failed to send.");
                 }
                 else {
-                    history.push_back("You: " + input);
+                    if (input[0] != '/') {
+                        history.push_back("You: " + input);
+                    }
                 }
             }
             else if (!connected) {
