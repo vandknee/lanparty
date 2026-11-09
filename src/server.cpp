@@ -48,7 +48,28 @@ int main() {
         return 1;
     }
 
+    
     cout << "Client connected successfully!" << endl;
+
+    // Buffer to store incoming messages
+    char buffer[1024];
+
+    while (true) {
+        // Receive data from the client
+        int bytesReceived = recv(clientSocket, buffer,
+                                sizeof(buffer) - 1, 0);
+
+        if (bytesReceived <= 0) {
+            cout << "Client disconnected." << endl;
+            break;
+        }
+
+        // Convert received bytes into a C-style string
+        buffer[bytesReceived] = '\0';
+
+        // Print the message
+        cout << "Client: " << buffer << endl;
+    }
 
     close(clientSocket);
     close(serverSocket);

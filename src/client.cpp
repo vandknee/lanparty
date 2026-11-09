@@ -31,9 +31,29 @@ int main() {
         return 1;
     }
 
+    
     cout << "Connected successfully!" << endl;
 
+    string message;
+
+    while (true) {
+        cout << "You: ";
+        getline(cin, message);
+
+        if (!cin || message == "/quit") {
+            break;
+        }
+
+        // Send the message to the server
+        if (send(clientSocket, message.c_str(),
+                message.size(), 0) == -1) {
+            perror("Send failed");
+            break;
+        }
+    }
+
     close(clientSocket);
+
 
     return 0;
 }
