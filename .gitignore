@@ -1,0 +1,14 @@
+# CMake build files
+/build/
+
+# VS Code local settings
+.vscode/
+
+# Compiled binaries
+*.o
+*.out
+*.exe
+
+# Temporary files
+*~
+*.swp

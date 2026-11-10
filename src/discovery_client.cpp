@@ -1,6 +1,7 @@
 
 #include <iostream>
 #include <string>
+#include <vector>
 #include <set>
 #include <chrono>
 #include <sys/socket.h>
@@ -11,37 +12,35 @@
 
 using namespace std;
 
-int main() {
+vector<string> discoverServers() {
+    set<string> foundServers;
+
     int udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
 
     if (udpSocket == -1) {
-        perror("Socket creation failed");
-        return 1;
+        perror("UDP socket failed");
+        return {};
     }
 
-    // Allow UDP broadcasts
     int option = 1;
 
     if (setsockopt(udpSocket, SOL_SOCKET, SO_BROADCAST,
                    &option, sizeof(option)) == -1) {
-        perror("Broadcast option failed");
+        perror("Broadcast failed");
         close(udpSocket);
-        return 1;
+        return {};
     }
 
     sockaddr_in broadcastAddress{};
     broadcastAddress.sin_family = AF_INET;
     broadcastAddress.sin_port = htons(5001);
 
-    inet_pton(
-        AF_INET,
-        "255.255.255.255",
-        &broadcastAddress.sin_addr
-    );
+    inet_pton(AF_INET, "255.255.255.255",
+              &broadcastAddress.sin_addr);
 
     string request = "LANPARTY_DISCOVER";
 
-    // Broadcast across the local network
+    // Search for servers on the local network
     ssize_t sent = sendto(
         udpSocket,
         request.c_str(),
@@ -51,19 +50,16 @@ int main() {
         sizeof(broadcastAddress)
     );
 
-    if (sent == -1)
-        perror("Broadcast failed");
+    if (sent < 0)
+        perror("UDP broadcast failed");
 
-    // Also test the local machine directly
+    // Also search the same computer
     sockaddr_in localAddress{};
     localAddress.sin_family = AF_INET;
     localAddress.sin_port = htons(5001);
 
-    inet_pton(
-        AF_INET,
-        "127.0.0.1",
-        &localAddress.sin_addr
-    );
+    inet_pton(AF_INET, "127.0.0.1",
+              &localAddress.sin_addr);
 
     sendto(
         udpSocket,
@@ -74,13 +70,8 @@ int main() {
         sizeof(localAddress)
     );
 
-    cout << "Searching for LAN Party servers...\n";
-
-    set<string> foundServers;
-
-    auto deadline =
-        chrono::steady_clock::now() +
-        chrono::seconds(3);
+    auto deadline = chrono::steady_clock::now()
+                    + chrono::seconds(3);
 
     while (chrono::steady_clock::now() < deadline) {
         auto remaining = chrono::duration_cast<
@@ -94,28 +85,22 @@ int main() {
         FD_ZERO(&readSet);
         FD_SET(udpSocket, &readSet);
 
-        timeval timeout{};
-        timeout.tv_sec = remaining.count() / 1000000;
-        timeout.tv_usec = remaining.count() % 1000000;
+        timeval waitTime{};
+        waitTime.tv_sec = remaining.count() / 1000000;
+        waitTime.tv_usec = remaining.count() % 1000000;
 
         int ready = select(
             udpSocket + 1,
             &readSet,
             nullptr,
             nullptr,
-            &timeout
+            &waitTime
         );
 
-        if (ready < 0) {
-            perror("select failed");
-            break;
-        }
-
-        if (ready == 0)
+        if (ready <= 0)
             break;
 
         char buffer[1024];
-
         sockaddr_in serverAddress{};
         socklen_t addressLength = sizeof(serverAddress);
 
@@ -138,30 +123,45 @@ int main() {
 
         char serverIP[INET_ADDRSTRLEN];
 
-        inet_ntop(
-            AF_INET,
-            &serverAddress.sin_addr,
-            serverIP,
-            sizeof(serverIP)
-        );
+        if (inet_ntop(
+                AF_INET,
+                &serverAddress.sin_addr,
+                serverIP,
+                sizeof(serverIP)
+            ) == nullptr) {
+            continue;
+        }
 
         foundServers.insert(serverIP);
     }
 
-    cout << "\nDiscovery complete!\n";
+    close(udpSocket);
 
-    if (foundServers.empty()) {
-        cout << "No LAN Party servers found.\n";
+    return vector<string>(
+        foundServers.begin(),
+        foundServers.end()
+    );
+}
+
+// Allows independent testing of discovery
+#ifdef DISCOVERY_STANDALONE
+
+int main() {
+    cout << "Searching for LAN Party servers...\n";
+
+    vector<string> servers = discoverServers();
+
+    if (servers.empty()) {
+        cout << "No servers found.\n";
     }
     else {
-        int number = 1;
-
-        for (const string& ip : foundServers) {
-            cout << number++ << ". " << ip
-                 << " (TCP port 5000)\n";
+        for (int i = 0; i < (int)servers.size(); i++) {
+            cout << i + 1 << ". " << servers[i]
+                 << " (Port 5000)\n";
         }
     }
 
-    close(udpSocket);
     return 0;
 }
+
+#endif

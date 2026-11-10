@@ -15,7 +15,7 @@
 #include <unistd.h>
 
 using namespace std;
-
+vector<string> discoverServers();
 // Incoming messages shared between threads
 queue<string> incomingMessages;
 mutex messageMutex;
@@ -201,13 +201,78 @@ void drawScreen(
     refresh();
 }
 
+
 int main(int argc, char* argv[]) {
-    if (argc != 2) {
-        cout << "Usage: ./client SERVER_IP\n";
+    string serverIP;
+
+    if (argc > 2) {
+        cout << "Usage: ./client [SERVER_IP]\n";
         return 1;
-    }   
+    }
+
+    // If an IP is provided, use it directly
+    if (argc == 2) {
+        serverIP = argv[1];
+    }
+    else {
+        cout << "===== LAN PARTY =====\n\n";
+        cout << "Searching for LAN Party servers...\n";
+
+        vector<string> servers = discoverServers();
+
+        if (servers.empty()) {
+            cout << "\nNo servers discovered.\n";
+        }
+        else {
+            cout << "\nAvailable servers:\n\n";
+
+            for (int i = 0; i < (int)servers.size(); i++) {
+                cout << i + 1 << ". "
+                     << servers[i]
+                     << " (Port 5000)\n";
+            }
+        }
+
+        cout << "\n0. Enter IP manually\n";
+
+        int choice = -1;
+
+        while (true) {
+            cout << "\nSelect server: ";
+
+            string answer;
+            getline(cin, answer);
+
+            try {
+                size_t used = 0;
+                choice = stoi(answer, &used);
+
+                if (used != answer.size())
+                    continue;
+            }
+            catch (...) {
+                cout << "Enter a valid number.\n";
+                continue;
+            }
+
+            if (choice >= 0 &&
+                choice <= (int)servers.size())
+                break;
+
+            cout << "Invalid selection.\n";
+        }
+
+        if (choice == 0) {
+            cout << "Enter server IP: ";
+            getline(cin, serverIP);
+        }
+        else {
+            serverIP = servers[choice - 1];
+        }
+    }
 
     string username;
+
     string currentRoom = "lobby";
     cout << "Enter username: ";
     getline(cin, username);
@@ -236,9 +301,8 @@ int main(int argc, char* argv[]) {
     sockaddr_in serverAddress{};
     serverAddress.sin_family = AF_INET;
     serverAddress.sin_port = htons(5000);
-
-    if (inet_pton(AF_INET, argv[1],
-                  &serverAddress.sin_addr) != 1) {
+    if (inet_pton(AF_INET, serverIP.c_str(),
+                &serverAddress.sin_addr) != 1) {
         cout << "Invalid IP address.\n";
         close(clientSocket);
         return 1;

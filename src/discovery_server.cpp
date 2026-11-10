@@ -7,7 +7,6 @@
 #include <unistd.h>
 
 using namespace std;
-void runDiscoveryServer();
 
 void runDiscoveryServer() {
     int udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
