@@ -7,29 +7,29 @@
 #include <unistd.h>
 
 using namespace std;
+void runDiscoveryServer();
 
-int main() {
+void runDiscoveryServer() {
     int udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
 
     if (udpSocket == -1) {
-        perror("Socket creation failed");
-        return 1;
+        perror("UDP socket failed");
+        return;
     }
 
-    sockaddr_in serverAddress{};
-    serverAddress.sin_family = AF_INET;
-    serverAddress.sin_port = htons(5001);
-    serverAddress.sin_addr.s_addr = INADDR_ANY;
+    sockaddr_in address{};
+    address.sin_family = AF_INET;
+    address.sin_port = htons(5001);
+    address.sin_addr.s_addr = INADDR_ANY;
 
-    if (bind(udpSocket, (sockaddr*)&serverAddress,
-             sizeof(serverAddress)) == -1) {
-        perror("Bind failed");
+    if (bind(udpSocket, (sockaddr*)&address,
+             sizeof(address)) == -1) {
+        perror("UDP bind failed");
         close(udpSocket);
-        return 1;
+        return;
     }
 
-    cout << "LAN Party UDP Discovery Server started!\n";
-    cout << "Listening for discovery requests on port 5001...\n";
+    cout << "UDP discovery running on port 5001\n";
 
     char buffer[1024];
 
@@ -51,34 +51,37 @@ int main() {
 
         string request(buffer, bytes);
 
-        if (request == "LANPARTY_DISCOVER") {
-            char clientIP[INET_ADDRSTRLEN];
+        if (request != "LANPARTY_DISCOVER")
+            continue;
 
-            inet_ntop(
-                AF_INET,
-                &clientAddress.sin_addr,
-                clientIP,
-                sizeof(clientIP)
-            );
+        string response = "LANPARTY_SERVER|5000";
 
-            cout << "Discovery request from "
-                 << clientIP << endl;
+        ssize_t sent = sendto(
+            udpSocket,
+            response.c_str(),
+            response.size(),
+            0,
+            (sockaddr*)&clientAddress,
+            clientLength
+        );
 
-            string response = "LANPARTY_SERVER|5000";
-
-            sendto(
-                udpSocket,
-                response.c_str(),
-                response.size(),
-                0,
-                (sockaddr*)&clientAddress,
-                clientLength
-            );
-
-            cout << "Discovery response sent.\n";
+        if (sent < 0) {
+            perror("UDP response failed");
+            continue;
         }
+
+        char clientIP[INET_ADDRSTRLEN];
+
+        inet_ntop(
+            AF_INET,
+            &clientAddress.sin_addr,
+            clientIP,
+            sizeof(clientIP)
+        );
+
+        cout << "Discovery request answered: "
+             << clientIP << endl;
     }
 
     close(udpSocket);
-    return 0;
 }

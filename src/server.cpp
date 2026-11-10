@@ -11,7 +11,7 @@
 #include <unistd.h>
 
 using namespace std;
-
+void runDiscoveryServer();
 struct Client {
     string username;
     string room;
@@ -79,6 +79,28 @@ void moveClient(int clientSocket, const string& newRoom) {
 void handleCommand(int clientSocket, const string& command) {
     lock_guard<mutex> lock(serverMutex);
 
+
+    if (command == "/users") {
+        string roomName = clients[clientSocket].room;
+        string result = "Users in #" + roomName + ": ";
+
+        bool first = true;
+
+        for (int socketFd : rooms[roomName]) {
+            if (!first)
+                result += ", ";
+
+            result += clients[socketFd].username;
+            first = false;
+        }
+
+        sendNotice(clientSocket, result);
+        return;
+    }
+    if (command == "/hello") {
+        sendNotice(clientSocket, "Welcome to LAN Party!");
+        return;
+    }
     if (command == "/rooms") {
         string result = "Available rooms: ";
 
@@ -271,6 +293,10 @@ int main() {
     cout << "LAN Party server started!\n";
     cout << "Room management enabled.\n";
     cout << "Listening on port 5000...\n";
+
+        
+    thread discoveryThread(runDiscoveryServer);
+    discoveryThread.detach();
 
     while (true) {
         int clientSocket = accept(serverSocket, nullptr, nullptr);
